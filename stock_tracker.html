@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Stock Price Tracker</title>
+    <!-- Tailwind CSS CDN for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js CDN for charting -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f2f5;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start; /* Align to top */
+            min-height: 100vh;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .container {
+            background-color: #ffffff;
+            border-radius: 15px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+            width: 100%;
+            max-width: 800px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .input-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .input-group input[type="text"] {
+            flex-grow: 1;
+            padding: 12px 15px;
+            border: 1px solid #cbd5e0;
+            border-radius: 8px;
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.2s;
+            min-width: 150px; /* Ensure input is not too small on mobile */
+        }
+        .input-group input[type="text"]:focus {
+            border-color: #3b82f6; /* Blue-500 */
+        }
+        .input-group button {
+            padding: 12px 25px;
+            background-color: #3b82f6; /* Blue-500 */
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+            transition: background-color 0.2s, transform 0.1s;
+            white-space: nowrap; /* Prevent button text from wrapping */
+        }
+        .input-group button:hover {
+            background-color: #2563eb; /* Blue-600 */
+            transform: translateY(-1px);
+        }
+        .input-group button:active {
+            transform: translateY(0);
+        }
+        .stock-info {
+            background-color: #f8fafc; /* Gray-50 */
+            border-radius: 10px;
+            padding: 20px;
+            border: 1px solid #e2e8f0; /* Gray-200 */
+        }
+        .stock-info h2 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #1a202c; /* Gray-900 */
+            margin-bottom: 10px;
+        }
+        .stock-info p {
+            font-size: 1rem;
+            color: #4a5568; /* Gray-700 */
+            margin-bottom: 5px;
+        }
+        .error-message {
+            color: #ef4444; /* Red-500 */
+            font-weight: 600;
+            margin-top: 10px;
+        }
+        .loading-spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-left-color: #3b82f6;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            display: none; /* Hidden by default */
+            margin-left: 10px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .chart-container {
+            position: relative;
+            height: 300px; /* Fixed height for the chart */
+            width: 100%;
+        }
+        @media (max-width: 600px) {
+            .input-group {
+                flex-direction: column;
+            }
+            .input-group input[type="text"],
+            .input-group button {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center p-4 min-h-screen">
+    <div class="container">
+        <h1 class="text-3xl font-bold text-center text-gray-800 mb-6">Stock Price Tracker</h1>
+
+        <div class="input-group">
+            <input type="text" id="stockSymbol" placeholder="Enter stock symbol (e.g., IBM, MSFT)" class="rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500">
+            <button id="fetchStock" class="rounded-lg shadow-md hover:shadow-lg">Get Stock Data</button>
+            <div id="loadingSpinner" class="loading-spinner"></div>
+        </div>
+
+        <div id="stockInfo" class="stock-info hidden">
+            <h2 id="companyName"></h2>
+            <p><strong>Symbol:</strong> <span id="symbol"></span></p>
+            <p><strong>Latest Price:</strong> <span id="latestPrice"></span></p>
+            <p><strong>Change:</strong> <span id="change"></span></p>
+            <p><strong>Change Percent:</strong> <span id="changePercent"></span></p>
+            <p><strong>Open:</strong> <span id="openPrice"></span></p>
+            <p><strong>High:</strong> <span id="highPrice"></span></p>
+            <p><strong>Low:</strong> <span id="lowPrice"></span></p>
+            <p><strong>Volume:</strong> <span id="volume"></span></p>
+        </div>
+
+        <div id="errorMessage" class="error-message hidden"></div>
+
+        <div class="chart-container">
+            <canvas id="stockChart"></canvas>
+        </div>
+    </div>
+
+    <script>
+        // IMPORTANT: Replace 'YOUR_ALPHA_VANTAGE_API_KEY' with your actual Alpha Vantage API key.
+        // You can get a free API key from: https://www.alphavantage.co/support/#api-key
+        const API_KEY = 'AV6F66LKK9USN62T'; // <<< REMEMBER TO CHANGE THIS!
+        const BASE_URL = 'https://www.alphavantage.co/query?';
+
+        const stockSymbolInput = document.getElementById('stockSymbol');
+        const fetchStockButton = document.getElementById('fetchStock');
+        const stockInfoDiv = document.getElementById('stockInfo');
+        const companyNameSpan = document.getElementById('companyName');
+        const symbolSpan = document.getElementById('symbol');
+        const latestPriceSpan = document.getElementById('latestPrice');
+        const changeSpan = document.getElementById('change');
+        const changePercentSpan = document.getElementById('changePercent');
+        const openPriceSpan = document.getElementById('openPrice');
+        const highPriceSpan = document.getElementById('highPrice');
+        const lowPriceSpan = document.getElementById('lowPrice');
+        const volumeSpan = document.getElementById('volume');
+        const errorMessageDiv = document.getElementById('errorMessage');
+        const loadingSpinner = document.getElementById('loadingSpinner');
+        const stockChartCanvas = document.getElementById('stockChart');
+
+        let stockChart; // Variable to hold the Chart.js instance
+
+        // Function to display error messages
+        function displayError(message) {
+            errorMessageDiv.textContent = message;
+            errorMessageDiv.classList.remove('hidden');
+            stockInfoDiv.classList.add('hidden'); // Hide info if there's an error
+            if (stockChart) {
+                stockChart.destroy(); // Clear old chart
+            }
+        }
+
+        // Function to hide error messages
+        function hideError() {
+            errorMessageDiv.classList.add('hidden');
+        }
+
+        // Function to show/hide loading spinner
+        function toggleLoading(show) {
+            if (show) {
+                loadingSpinner.style.display = 'block';
+                fetchStockButton.disabled = true; // Disable button during loading
+            } else {
+                loadingSpinner.style.display = 'none';
+                fetchStockButton.disabled = false; // Re-enable button
+            }
+        }
+
+        // Function to fetch stock data
+        async function fetchStockData(symbol) {
+            hideError();
+            toggleLoading(true);
+            stockInfoDiv.classList.add('hidden'); // Hide previous info
+
+            try {
+                // Fetch daily time series data
+                const timeSeriesUrl = `${BASE_URL}function=TIME_SERIES_DAILY&symbol=${symbol}&apikey=${API_KEY}`;
+                const timeSeriesResponse = await fetch(timeSeriesUrl);
+                const timeSeriesData = await timeSeriesResponse.json();
+
+                // Fetch quote endpoint for latest price and company name (Alpha Vantage doesn't provide company name in daily series by default)
+                const quoteUrl = `${BASE_URL}function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${API_KEY}`;
+                const quoteResponse = await fetch(quoteUrl);
+                const quoteData = await quoteResponse.json();
+
+                // Check for API errors or empty data
+                if (timeSeriesData["Error Message"] || !timeSeriesData["Time Series (Daily)"] || Object.keys(timeSeriesData["Time Series (Daily)"]).length === 0) {
+                    displayError(`Could not find data for symbol: ${symbol}. Please check the symbol and your API key.`);
+                    return;
+                }
+                if (quoteData["Error Message"] || !quoteData["Global Quote"] || Object.keys(quoteData["Global Quote"]).length === 0) {
+                    displayError(`Could not find real-time quote for symbol: ${symbol}.`);
+                    return;
+                }
+
+                const dailyData = timeSeriesData["Time Series (Daily)"];
+                const dates = Object.keys(dailyData).sort(); // Get dates and sort them
+                const closingPrices = dates.map(date => parseFloat(dailyData[date]["4. close"]));
+
+                // Get the latest available date's data for display
+                const latestDate = dates[dates.length - 1];
+                const latestDayData = dailyData[latestDate];
+
+                const globalQuote = quoteData["Global Quote"];
+
+                // Populate stock info
+                companyNameSpan.textContent = symbol.toUpperCase(); // Alpha Vantage 'GLOBAL_QUOTE' doesn't give company name, so just use symbol
+                symbolSpan.textContent = globalQuote["01. symbol"];
+                latestPriceSpan.textContent = parseFloat(globalQuote["05. price"]).toFixed(2);
+                changeSpan.textContent = parseFloat(globalQuote["09. change"]).toFixed(2);
+                changePercentSpan.textContent = parseFloat(globalQuote["10. change percent"]).toFixed(2) + '%';
+                openPriceSpan.textContent = parseFloat(globalQuote["02. open"]).toFixed(2);
+                highPriceSpan.textContent = parseFloat(globalQuote["03. high"]).toFixed(2);
+                lowPriceSpan.textContent = parseFloat(globalQuote["04. low"]).toFixed(2);
+                volumeSpan.textContent = parseInt(globalQuote["06. volume"]).toLocaleString();
+
+
+                stockInfoDiv.classList.remove('hidden'); // Show info div
+
+                // Render the chart
+                renderChart(dates.slice(-30), closingPrices.slice(-30), symbol); // Show last 30 days
+
+            } catch (error) {
+                console.error('Error fetching stock data:', error);
+                displayError('Failed to fetch stock data. Please try again later or check your network connection.');
+            } finally {
+                toggleLoading(false);
+            }
+        }
+
+        // Function to render the stock chart
+        function renderChart(labels, data, symbol) {
+            // Destroy existing chart if it exists
+            if (stockChart) {
+                stockChart.destroy();
+            }
+
+            stockChart = new Chart(stockChartCanvas, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: `${symbol} Closing Price`,
+                        data: data,
+                        borderColor: '#3b82f6', // Blue-500
+                        backgroundColor: 'rgba(59, 130, 246, 0.2)', // Light blue fill
+                        borderWidth: 2,
+                        pointRadius: 0, // Hide points
+                        fill: true,
+                        tension: 0.4 // Smooth lines
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false, // Allow chart to fill container
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            labels: {
+                                color: '#333'
+                            }
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: {
+                                display: false
+                            },
+                            ticks: {
+                                color: '#555',
+                                autoSkip: true, // Automatically skip labels if too many
+                                maxTicksLimit: 10 // Limit the number of ticks on x-axis
+                            }
+                        },
+                        y: {
+                            beginAtZero: false,
+                            grid: {
+                                color: '#e2e8f0' // Light gray grid lines
+                            },
+                            ticks: {
+                                color: '#555',
+                                callback: function(value) {
+                                    return '$' + value.toFixed(2); // Format as currency
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Event listener for the button click
+        fetchStockButton.addEventListener('click', () => {
+            const symbol = stockSymbolInput.value.trim().toUpperCase();
+            if (symbol) {
+                fetchStockData(symbol);
+            } else {
+                displayError('Please enter a stock symbol.');
+            }
+        });
+
+        // Optional: Fetch data when Enter key is pressed in the input field
+        stockSymbolInput.addEventListener('keypress', (event) => {
+            if (event.key === 'Enter') {
+                fetchStockButton.click();
+            }
+        });
+
+        // Initial fetch for a default stock (e.g., IBM) when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            stockSymbolInput.value = 'IBM'; // Set a default symbol
+            fetchStockButton.click(); // Trigger the fetch
+        });
+    </script>
+</body>
+</html>
