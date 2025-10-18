@@ -1,9 +1,3 @@
-Here’s a **professional, complete `README.md` file** for your **Interactive Stock Price Tracker** project 👇
-(You can copy this and paste it directly into a file named `README.md` in your project folder.)
-
----
-
-````markdown
 # 📈 Interactive Stock Price Tracker
 
 An **interactive web application** built with **HTML, Tailwind CSS, and Chart.js** that allows users to view **real-time stock price data** and **30-day historical trends** using the **Alpha Vantage API**.
@@ -42,11 +36,7 @@ If you’ve uploaded this to GitHub, clone it to your local machine:
 ```bash
 git clone https://github.com/<your-username>/Interactive-Stock-Price-Tracker.git
 cd Interactive-Stock-Price-Tracker
-````
 
-Or, simply download the `.zip` file and extract it.
-
----
 
 ### 2. Get a Free API Key
 
